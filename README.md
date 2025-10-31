@@ -35,7 +35,6 @@ A comprehensive YouTube comment analysis platform that combines multiple AI tech
 - **OpenAI GPT-4**: Advanced comment analysis and insights generation
 - **BERTopic**: Topic modeling and clustering
 - **Sentence Transformers**: Semantic text embeddings
-- **PyTorch**: Deep learning framework for model inference
 
 ### 📊 Data Processing & Visualization
 - **Pandas**: Data manipulation and analysis
@@ -44,10 +43,6 @@ A comprehensive YouTube comment analysis platform that combines multiple AI tech
 - **Plotly**: Interactive charts and graphs
 - **Streamlit**: Web application framework
 
-### 🔧 Machine Learning & Clustering
-- **Scikit-learn**: Machine learning utilities
-- **UMAP**: Dimensionality reduction for topic visualization
-- **HDBSCAN**: Density-based clustering for topic discovery
 
 ### 🌐 APIs & Integration
 - **Google API Python Client**: YouTube Data API v3 integration

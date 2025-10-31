@@ -83,7 +83,7 @@ def collect_comments():
                 
                 # Create a directory for the CSV files
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_dir = f"comments_{timestamp}"
+                output_dir = f"data/comments_{timestamp}"
                 os.makedirs(output_dir, exist_ok=True)
                 
                 # Progress bar
@@ -359,7 +359,7 @@ def main():
         st.sidebar.header("Data Selection")
         
         # Get list of comment files
-        comment_files = glob.glob("comments_*/all_comments.csv")
+        comment_files = glob.glob("data/comments_*/all_comments.csv")
         if not comment_files:
             st.warning("No comment files found. Please collect comments first using the 'Collect Comments' tab.")
             return

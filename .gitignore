@@ -85,3 +85,5 @@ topic_analysis_gpt.py
 # Jupyter notebooks (local only)
 *.ipynb
 *.ipynb_checkpoints/ 
+# Large media files
+assets/YtProject.MOV
