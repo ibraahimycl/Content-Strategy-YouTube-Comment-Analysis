@@ -1,4 +1,6 @@
 # 📊 YouTube Comment Analysis - AI-Powered Analytics Platform
+This AI-powered analytics platform is designed to help content creators transform raw YouTube comments into strategic insights. By leveraging sentiment analysis,
+topic modeling, and natural language processing, it provides the data-driven feedback needed to refine content and deepen audience engagement.
 
 ## 🎥 Demo Video
 
@@ -6,63 +8,55 @@
 
 > **Click the image above to watch the demo video on Google Drive.**
 
-A comprehensive YouTube comment analysis platform that combines multiple AI technologies to extract insights from YouTube comments using sentiment analysis, topic modeling, and natural language processing.
 
-## 🚀 Features
+## Features
 
-### 🔍 Data Collection
+### Data Collection
 - **YouTube API Integration**: Collect comments from channels and playlists
 - **Date Range Filtering**: Analyze comments from specific time periods
 - **Batch Processing**: Handle multiple videos simultaneously
 - **Automatic Organization**: Save comments with video titles and metadata
 
-### 🤖 AI-Powered Analysis
+### AI-Powered Analysis
 - **Sentiment Analysis**: Using Hugging Face Transformers (RoBERTa model)
 - **Topic Modeling**: BERTopic for automatic topic discovery
 - **GPT-4 Integration**: OpenAI-powered comment insights and Q&A
 - **Advanced NLP**: Sentence transformers for semantic understanding
 
-### 📈 Visualization & Insights
+### Visualization & Insights
 - **Interactive Dashboards**: Streamlit-based web interface
 - **Sentiment Distribution**: Visual sentiment analysis results
 - **Topic Clustering**: UMAP and HDBSCAN for topic visualization
 - **Comment Analytics**: Like count analysis and engagement metrics
 
-## 🛠️ Technologies Used
+## Technologies Used
 
-### 🤖 AI & Machine Learning
-- **Hugging Face Transformers**: `cardiffnlp/twitter-roberta-base-sentiment` for sentiment analysis
-- **OpenAI GPT-4**: Advanced comment analysis and insights generation
-- **BERTopic**: Topic modeling and clustering
-- **Sentence Transformers**: Semantic text embeddings
-
-### 📊 Data Processing & Visualization
+### Data Processing & Visualization
 - **Pandas**: Data manipulation and analysis
 - **NumPy**: Numerical computing
 - **Matplotlib & Seaborn**: Static visualizations
-- **Plotly**: Interactive charts and graphs
 - **Streamlit**: Web application framework
 
 
-### 🌐 APIs & Integration
+### APIs & Integration
 - **Google API Python Client**: YouTube Data API v3 integration
 - **OpenAI Python Client**: GPT-4 API integration
 
 ## 📁 Project Structure
 
 ```
-YoutubeProject/
-├── streamlit_app.py           # Main Streamlit web application
-├── get_id.py                  # YouTube API utilities for video/channel extraction
-├── comment.py                 # Comment collection and processing
-├── channel_comments.py        # Channel-specific comment analysis
-├── sentiment_analysis.py      # Sentiment analysis implementation
-├── topic_analysis.py          # BERTopic-based topic modeling
-├── topic_analysis_gpt.py      # GPT-4 powered topic analysis
-├── requirements.txt           # Python dependencies
-├── COMMENTS/                  # Comment data storage
-├── comments_*/                # Timestamped comment collections
-└── README.md                  # This file
+.
+├── data/                    # Stores collected and processed comment data
+│   └── comments_*/            # Timestamped folders for each data collection run
+├── notebooks/               # Jupyter notebooks for analysis and exploration
+│   └── readcsv.ipynb          # Example notebook for reading comment data
+├── src/                     # Main source code for the application
+│   ├── streamlit_app.py       # The core Streamlit web application
+│   ├── get_id.py              # Utilities for the YouTube Data API
+│   └── comment.py             # Logic for comment collection and processing
+├── .gitignore               # Specifies files and folders for Git to ignore
+├── README.md                # Project documentation (this file)
+└── requirements.txt         # List of Python dependencies
 ```
 
 ## 🛠️ Installation
@@ -85,7 +79,7 @@ pip install -r requirements.txt
 # Add your YouTube API key and OpenAI API key to the application
 ```
 
-## 🎮 Usage
+## Usage
 
 ### Running the Application
 ```bash
@@ -149,26 +143,7 @@ from googleapiclient.discovery import build
 youtube = build('youtube', 'v3', developerKey=API_KEY)
 ```
 
-## 📊 Analysis Capabilities
-
-### Sentiment Analysis
-- **Model**: RoBERTa-based sentiment classifier
-- **Accuracy**: High accuracy for social media text
-- **Output**: Positive, Negative, Neutral classifications
-
-### Topic Modeling
-- **BERTopic**: Automatic topic discovery
-- **UMAP**: 2D visualization of topics
-- **HDBSCAN**: Density-based clustering
-- **GPT-4**: AI-powered topic analysis
-
-### Comment Analytics
-- **Engagement Metrics**: Like count analysis
-- **Temporal Analysis**: Comments over time
-- **Video Comparison**: Cross-video analysis
-- **User Insights**: Comment patterns and trends
-
-## 🎯 Use Cases
+## Use Cases
 
 ### Content Creators
 - **Audience Sentiment**: Understand viewer reactions
@@ -184,38 +159,9 @@ youtube = build('youtube', 'v3', developerKey=API_KEY)
 - **Social Media Analysis**: Study online discourse patterns
 - **Sentiment Trends**: Track public opinion over time
 - **Topic Evolution**: Analyze trending topics and themes
-
-## 🔮 Future Enhancements
-
-- [ ] Multi-language sentiment analysis
-- [ ] Real-time comment monitoring
-- [ ] Advanced visualization dashboards
-- [ ] Comment toxicity detection
-- [ ] Influencer identification
-- [ ] Automated report generation
-- [ ] Integration with other social media platforms
-
+- 
 ## 📝 License
 
 This project is developed for educational and research purposes.
 
-## 🤝 Contributing
 
-Feel free to contribute to this project by:
-- Reporting bugs
-- Suggesting new features
-- Improving documentation
-- Enhancing AI models and analysis
-
-## 📞 Contact
-
-For questions or suggestions, please open an issue on GitHub.
-
-## 🎯 Key Features Summary
-
-- **Multi-Model AI**: Combines Hugging Face, OpenAI, and BERTopic
-- **Real-time Analysis**: Live sentiment and topic analysis
-- **Interactive Interface**: Streamlit-based web application
-- **Comprehensive Analytics**: Sentiment, topics, engagement metrics
-- **Scalable Architecture**: Handles large comment datasets
-- **Professional Visualization**: Advanced charts and insights 
