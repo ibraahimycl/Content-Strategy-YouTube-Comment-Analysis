@@ -1,57 +1,90 @@
 import streamlit as st
 import pandas as pd
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import seaborn as sns
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import torch
-from openai import OpenAI
-import json
-from collections import defaultdict
-import glob
-from get_id import extract_channel_id, get_uploads_playlist_id, get_videos_by_date_range, extract_playlist_id, get_video_title
-from comment import video_comments
-import re
+from analysis_service import (
+    analyze_sentiment as service_analyze_sentiment,
+    build_llm,
+    get_ai_answer as service_get_ai_answer,
+    get_comment_insights as service_get_comment_insights,
+    load_sentiment_model as service_load_sentiment_model,
+)
+from agent_executor import run_question_agent
+from comment_collection_service import collect_comments_for_request, list_collections
+from config import load_config
+from exceptions import AppError
+from logging_utils import get_logger, setup_logging
+from models import AnalysisRequest
 
-# Initialize OpenAI client
-client = OpenAI(api_key="")
+setup_logging()
+logger = get_logger(__name__)
+config = load_config()
+llm_client = build_llm(config)
 
-API_KEY = ""
 
-def sanitize_filename(title):
-    # Remove special characters and replace spaces with underscores
-    sanitized = re.sub(r'[^\w\s-]', '', title.lower())
-    sanitized = re.sub(r'[-\s]+', '_', sanitized)
-    return sanitized
+def _resolve_date_range(preset_label: str):
+    today = datetime.now().date()
+    if preset_label == "Last 2 Months":
+        start = today - timedelta(days=60)
+        return start, today
+    if preset_label == "Last 3 Months":
+        start = today - timedelta(days=90)
+        return start, today
+    return None, None
 
-def collect_comments():
+
+def collect_comments(api_key: str):
     """Collect comments from YouTube videos and save them to CSV files"""
     st.subheader("Collect Comments")
-    
-    # Input type selection
-    input_type = st.radio(
-        "Choose input type:",
-        ["Channel URL", "Playlist URL"],
-        horizontal=True
+
+    scope_label = st.radio(
+        "Analysis scope",
+        ["Channel", "Playlist (Concept)"],
+        horizontal=True,
+        help="Channel analyzes overall performance, Playlist analyzes a specific content concept.",
     )
-    
-    # URL input
+    scope = "channel" if scope_label == "Channel" else "playlist"
+
+    url_label = "Channel URL" if scope == "channel" else "Playlist URL"
     url = st.text_input(
-        f"Enter the {input_type.lower()}:",
-        placeholder="https://www.youtube.com/..."
+        f"Enter {url_label}:",
+        placeholder="https://www.youtube.com/...",
     )
-    
-    # Date range selection
+
+    date_preset = st.radio(
+        "Date range",
+        ["Last 2 Months", "Last 3 Months", "Custom"],
+        horizontal=True,
+    )
+
+    preset_start, preset_end = _resolve_date_range(date_preset)
     col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input("Start Date")
-    with col2:
-        end_date = st.date_input("End Date")
+    if date_preset == "Custom":
+        with col1:
+            start_date = st.date_input("Start Date")
+        with col2:
+            end_date = st.date_input("End Date")
+    else:
+        start_date = preset_start
+        end_date = preset_end
+        with col1:
+            st.date_input("Start Date", value=start_date, disabled=True)
+        with col2:
+            st.date_input("End Date", value=end_date, disabled=True)
     
     if st.button("Collect Comments"):
+        if not api_key:
+            st.error("YouTube API key is required. Set YOUTUBE_API_KEY in your environment.")
+            return
+
         if not url:
             st.error("Please enter a URL")
+            return
+
+        if start_date > end_date:
+            st.error("Start date cannot be after end date.")
             return
         
         # Convert dates to datetime objects
@@ -60,238 +93,61 @@ def collect_comments():
         
         with st.spinner("Collecting comments..."):
             try:
-                # Get video IDs based on input type
-                if input_type == "Channel URL":
-                    channel_id = extract_channel_id(url, API_KEY)
-                    if not channel_id:
-                        st.error("Could not get channel ID.")
-                        return
-                    
-                    playlist_id = get_uploads_playlist_id(channel_id)
-                    video_ids = get_videos_by_date_range(playlist_id, start_datetime, end_datetime, is_channel_uploads=True)
-                else:
-                    playlist_id = extract_playlist_id(url, API_KEY)
-                    if not playlist_id:
-                        st.error("Could not get playlist ID.")
-                        return
-                    
-                    video_ids = get_videos_by_date_range(playlist_id, start_datetime, end_datetime)
-                
-                if not video_ids:
-                    st.warning("No videos found in the specified date range.")
-                    return
-                
-                # Create a directory for the CSV files
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_dir = f"data/comments_{timestamp}"
-                os.makedirs(output_dir, exist_ok=True)
-                
-                # Progress bar
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                # List to store all CSV filenames
-                csv_files = []
-                
-                # Process each video
-                for i, video_id in enumerate(video_ids, 1):
-                    status_text.text(f"Processing video {i}/{len(video_ids)}")
-                    progress_bar.progress(i / len(video_ids))
-                    
-                    # Get video title
-                    video_title = get_video_title(video_id, API_KEY)
-                    if video_title:
-                        safe_title = sanitize_filename(video_title)
-                        csv_filename = os.path.join(output_dir, f"{safe_title}.csv")
-                    else:
-                        csv_filename = os.path.join(output_dir, f"video_{video_id}.csv")
-                    
-                    try:
-                        video_comments(video_id, csv_filename)
-                        csv_files.append(csv_filename)
-                    except Exception as e:
-                        st.error(f"Error getting comments for video {video_id}: {e}")
-                
-                if not csv_files:
-                    st.error("Could not get comments for any videos.")
-                    return
-                
-                # Merge all CSV files
-                status_text.text("Merging comment files...")
-                all_comments = []
-                
-                for csv_file in csv_files:
-                    try:
-                        df = pd.read_csv(csv_file)
-                        video_title = os.path.basename(csv_file).replace('.csv', '')
-                        df['Video Title'] = video_title
-                        all_comments.append(df)
-                    except Exception as e:
-                        st.error(f"Error reading file {csv_file}: {e}")
-                
-                if all_comments:
-                    # Combine all dataframes
-                    merged_df = pd.concat(all_comments, ignore_index=True)
-                    
-                    # Save merged file
-                    merged_filename = os.path.join(output_dir, "all_comments.csv")
-                    merged_df.to_csv(merged_filename, index=False)
-                    
-                    # Clear progress indicators
-                    progress_bar.empty()
-                    status_text.empty()
-                    
-                    st.success(f"Successfully collected and saved comments to {output_dir}")
-                    st.balloons()
-                    
-                    # Automatically refresh the page to show the new data
-                    st.experimental_rerun()
-                else:
-                    st.error("No comments to merge.")
-            
-            except Exception as e:
-                st.error(f"An error occurred: {str(e)}")
+                request = AnalysisRequest(
+                    scope=scope,
+                    url=url,
+                    start_date=start_datetime,
+                    end_date=end_datetime,
+                )
+                metadata = collect_comments_for_request(request=request, api_key=api_key)
+                output_dir = metadata.output_dir
+
+                st.success(f"Successfully collected and saved comments to {output_dir}")
+                st.info(
+                    f"Scope: {metadata.scope} | Requested: {metadata.requested_video_count} | "
+                    f"Processed: {metadata.video_count} | Skipped: {metadata.skipped_video_count} | "
+                    f"Range: {start_date} to {end_date}"
+                )
+                st.balloons()
+                st.experimental_rerun()
+            except AppError as exc:
+                st.error(str(exc))
+            except Exception as exc:
+                logger.exception("Unexpected error during comment collection")
+                st.error(f"An unexpected error occurred: {exc}")
 
 # Initialize sentiment analysis model
 @st.cache_resource
 def load_sentiment_model():
-    model_name = "cardiffnlp/twitter-roberta-base-sentiment"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    return model, tokenizer, device
+    return service_load_sentiment_model()
 
 def analyze_sentiment(comments_df, model, tokenizer, device):
-    sentiment_labels = {0: "NEGATIVE", 1: "NEUTRAL", 2: "POSITIVE"}
-    
-    def get_sentiment(comment):
-        if not isinstance(comment, str):
-            return "NEUTRAL"
-            
-        inputs = tokenizer(comment, return_tensors="pt", truncation=True, max_length=512)
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        
-        with torch.no_grad():
-            outputs = model(**inputs)
-            scores = torch.softmax(outputs.logits, dim=1)
-            predicted_class = torch.argmax(scores, dim=1).item()
-            
-        return sentiment_labels[predicted_class]
-    
-    comments_df['Sentiment'] = comments_df['Comment'].apply(get_sentiment)
-    return comments_df
+    return service_analyze_sentiment(comments_df, model, tokenizer, device)
 
 def get_comment_insights(comments_df, max_comments=100):
-    """Get insights about comments using GPT-4"""
-    # Sort comments by like count and get top comments
-    top_comments = comments_df.nlargest(max_comments, 'Like Count')
-    
-    # Get video count and names if analyzing multiple videos
-    video_count = comments_df['Video Title'].nunique()
-    if video_count > 1:
-        video_names = comments_df['Video Title'].unique().tolist()
-        video_info = f"Analyzing {video_count} videos: {', '.join(video_names[:3])}{'...' if len(video_names) > 3 else ''}"
-    else:
-        video_info = f"Analyzing video: {comments_df['Video Title'].iloc[0]}"
-    
-    # Prepare the comments data with a more concise format
-    comments_text = "\n".join([
-        f"Video: {row['Video Title']}\nComment: {row['Comment'][:200]}...\nLikes: {row['Like Count']}\nSentiment: {row['Sentiment']}\n"
-        for _, row in top_comments.iterrows()
-    ])
-    
-    # Add summary statistics
-    total_comments = len(comments_df)
-    sentiment_dist = comments_df['Sentiment'].value_counts().to_dict()
-    avg_likes = comments_df['Like Count'].mean()
-    
-    summary = f"""{video_info}
-Total Comments: {total_comments}
-Sentiment Distribution: {sentiment_dist}
-Average Likes: {avg_likes:.1f}
-
-Top {max_comments} Comments (by likes):
-{comments_text}"""
-
-    # Create the prompt
-    prompt = f"""Analyze these YouTube video comments and provide insights about:
-1. Overall sentiment and tone of the comments
-2. Main topics or themes discussed
-3. Common suggestions or feedback
-4. Notable complaints or concerns
-5. Most liked comments and their significance
-6. General audience reaction and engagement
-
-Comment Summary:
-{summary}
-
-Please provide a detailed analysis in a structured format. If analyzing multiple videos, highlight any differences or patterns across videos."""
-
     try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that analyzes YouTube comments and provides insights."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1000
+        return service_get_comment_insights(
+            client=llm_client,
+            model_name=config.openai_model,
+            comments_df=comments_df,
+            max_comments=max_comments,
         )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error getting insights: {str(e)}"
+    except Exception as exc:
+        logger.exception("Failed to generate insights")
+        return f"Error getting insights: {exc}"
 
 def get_ai_answer(question, comments_df, max_comments=50):
-    """Get AI answer for a specific question about comments"""
-    # Get video count and names if analyzing multiple videos
-    video_count = comments_df['Video Title'].nunique()
-    if video_count > 1:
-        video_names = comments_df['Video Title'].unique().tolist()
-        video_info = f"Analyzing {video_count} videos: {', '.join(video_names[:3])}{'...' if len(video_names) > 3 else ''}"
-    else:
-        video_info = f"Analyzing video: {comments_df['Video Title'].iloc[0]}"
-    
-    # Sort comments by relevance to the question (using like count as a proxy for importance)
-    relevant_comments = comments_df.nlargest(max_comments, 'Like Count')
-    
-    # Prepare a concise summary of the comments
-    comments_summary = "\n".join([
-        f"Video: {row['Video Title']}\nComment: {row['Comment'][:150]}...\nLikes: {row['Like Count']}\nSentiment: {row['Sentiment']}\n"
-        for _, row in relevant_comments.iterrows()
-    ])
-    
-    # Add summary statistics
-    total_comments = len(comments_df)
-    sentiment_dist = comments_df['Sentiment'].value_counts().to_dict()
-    
-    summary = f"""{video_info}
-Total Comments Analyzed: {total_comments}
-Sentiment Distribution: {sentiment_dist}
-
-Relevant Comments:
-{comments_summary}"""
-
-    prompt = f"""Based on these comments, answer the following question: {question}
-
-Comment Summary:
-{summary}
-
-Please provide a detailed and helpful answer focusing on the most relevant comments. If analyzing multiple videos, highlight any differences or patterns across videos."""
-
     try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that analyzes YouTube comments and provides insights."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=500
+        return service_get_ai_answer(
+            client=llm_client,
+            model_name=config.openai_model,
+            question=question,
+            comments_df=comments_df,
+            max_comments=max_comments,
         )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"Error getting answer: {str(e)}"
+    except Exception as exc:
+        logger.exception("Failed to generate answer")
+        return f"Error getting answer: {exc}"
 
 def plot_sentiment_distribution(comments_df):
     """Create sentiment distribution visualization"""
@@ -345,33 +201,72 @@ def plot_sentiment_by_video(comments_df):
     plt.tight_layout()
     return fig
 
+
+def _render_agent_steps(steps):
+    status_icon = {
+        "completed": "✅",
+        "in_progress": "⏳",
+        "failed": "❌",
+    }
+    for step in steps:
+        icon = status_icon.get(step.status, "•")
+        st.write(f"{icon} **{step.title}** - {step.message}")
+
 def main():
     st.title("YouTube Comments Analysis Agent")
+    st.sidebar.header("Configuration")
+    st.sidebar.caption("API keys are loaded from environment variables.")
+
+    if not config.youtube_api_key:
+        st.sidebar.warning("Missing YouTube API key.")
+    if not config.openai_api_key:
+        st.sidebar.warning("Missing OpenAI API key.")
     
     # Main tabs
     tab_collect, tab_analyze = st.tabs(["Collect Comments", "Analyze Comments"])
     
     with tab_collect:
-        collect_comments()
+        collect_comments(api_key=config.youtube_api_key)
     
     with tab_analyze:
-        # Sidebar for file selection
         st.sidebar.header("Data Selection")
-        
-        # Get list of comment files
-        comment_files = glob.glob("data/comments_*/all_comments.csv")
-        if not comment_files:
+        analysis_scope = st.sidebar.radio(
+            "Dataset scope",
+            ["All", "Channel", "Playlist (Concept)"],
+            help="Filter collected datasets by scope.",
+        )
+
+        selected_scope = None
+        if analysis_scope == "Channel":
+            selected_scope = "channel"
+        elif analysis_scope == "Playlist (Concept)":
+            selected_scope = "playlist"
+
+        collections = list_collections(scope=selected_scope)
+        if not collections:
             st.warning("No comment files found. Please collect comments first using the 'Collect Comments' tab.")
             return
-        
+
+        options = [item.merged_file for item in collections]
+        labels = {
+            item.merged_file: (
+                f"{os.path.basename(item.output_dir)} | {item.scope} | "
+                f"processed={item.video_count} | skipped={item.skipped_video_count}"
+            )
+            for item in collections
+        }
         selected_file = st.sidebar.selectbox(
             "Select a comment file",
-            comment_files,
-            format_func=lambda x: os.path.basename(os.path.dirname(x))
+            options,
+            format_func=lambda x: labels[x],
         )
         
         # Load and process data
         if selected_file:
+            selected_collection = next(item for item in collections if item.merged_file == selected_file)
+            st.caption(
+                f"Using `{selected_collection.scope}` dataset from `{selected_collection.output_dir}`"
+            )
             df = pd.read_csv(selected_file)
             
             # Add date filtering
@@ -530,8 +425,27 @@ def main():
                 
                 if user_question and st.button("Get Answer"):
                     with st.spinner("Thinking..."):
-                        answer = get_ai_answer(user_question, analysis_df, qa_max_comments)
-                        st.write(answer)
+                        agent_result = run_question_agent(
+                            question=user_question,
+                            comments_df=analysis_df,
+                            llm_client=llm_client,
+                            llm_model_name=config.openai_model,
+                            model=model,
+                            tokenizer=tokenizer,
+                            device=device,
+                            max_comments=qa_max_comments,
+                        )
+
+                    st.subheader("Agent Execution")
+                    _render_agent_steps(agent_result.steps)
+
+                    if agent_result.error:
+                        st.error(agent_result.error)
+                    else:
+                        st.subheader("Answer")
+                        st.write(agent_result.answer)
+                        with st.expander("Execution Artifacts"):
+                            st.json(agent_result.artifacts)
                         
                         # Add a note about the analysis scope
                         if analysis_scope == "Single Video":

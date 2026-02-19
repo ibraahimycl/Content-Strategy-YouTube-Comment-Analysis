@@ -1,12 +1,8 @@
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-import os
 from datetime import datetime
 import csv
 
-API_KEY = ""
-
-def video_comments(video_id, output_filename=None):
+def video_comments(video_id, api_key, output_filename=None):
     """
     Get comments for a video and save them to a CSV file.
     
@@ -18,7 +14,7 @@ def video_comments(video_id, output_filename=None):
     Returns:
         str: The name of the created CSV file
     """
-    youtube = build("youtube", "v3", developerKey=API_KEY)
+    youtube = build("youtube", "v3", developerKey=api_key)
     
     # Create CSV file
     if not output_filename:
@@ -73,6 +69,11 @@ def video_comments(video_id, output_filename=None):
     return output_filename
 
 if __name__ == "__main__":
+    api_key = input("YouTube API key: ").strip()
+    if not api_key:
+        print("API key is required.")
+        raise SystemExit(1)
+
     # This part is only for testing the script directly
     video_id = input("Please video link: ")
     if 'youtube.com' in video_id or 'youtu.be' in video_id:
@@ -82,5 +83,5 @@ if __name__ == "__main__":
         elif "youtu.be/" in video_id:
             video_id = video_id.split("youtu.be/")[1].split("?")[0]
     
-    output_file = video_comments(video_id)
+    output_file = video_comments(video_id, api_key=api_key)
     print(f"\nComments have been saved to {output_file}")

@@ -1,9 +1,6 @@
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import os
 from datetime import datetime
-
-API_KEY = ""
 
 
 def get_youtube_service(api_key):
@@ -105,7 +102,7 @@ def extract_playlist_id(playlist_url: str, api_key: str):
         print(f"Error: {e}")
         return None
 
-def get_videos_by_date_range(playlist_id, start_date, end_date, is_channel_uploads=False):
+def get_videos_by_date_range(playlist_id, start_date, end_date, api_key, is_channel_uploads=False):
     """
     Get videos from a playlist or channel uploads playlist within a date range.
     
@@ -118,8 +115,7 @@ def get_videos_by_date_range(playlist_id, start_date, end_date, is_channel_uploa
     Returns:
         list: List of video IDs that match the date criteria
     """
-    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-    youtube = get_youtube_service(API_KEY)
+    youtube = get_youtube_service(api_key)
     
     video_ids = []
     next_page_token = None
@@ -232,6 +228,11 @@ def get_video_title(video_id, api_key):
 
 # Example usage
 if __name__ == "__main__":
+    api_key = input("YouTube API key: ").strip()
+    if not api_key:
+        print("API key is required.")
+        raise SystemExit(1)
+
     print("Choose input type:")
     print("1. Channel URL")
     print("2. Playlist URL")
@@ -252,20 +253,26 @@ if __name__ == "__main__":
     
     if choice == "1":
         channel_url = input("Enter the channel URL: ")
-        channel_id = extract_channel_id(channel_url, API_KEY)
+        channel_id = extract_channel_id(channel_url, api_key)
         if channel_id:
             print(f"\nChannel ID found: {channel_id}")
             playlist_id = get_uploads_playlist_id(channel_id)
-            video_ids = get_videos_by_date_range(playlist_id, start_date, end_date, is_channel_uploads=True)
+            video_ids = get_videos_by_date_range(
+                playlist_id,
+                start_date,
+                end_date,
+                api_key,
+                is_channel_uploads=True,
+            )
         else:
             print("Channel ID could not be retrieved.")
             video_ids = []
     else:
         playlist_url = input("Enter the playlist URL: ")
-        playlist_id = extract_playlist_id(playlist_url, API_KEY)
+        playlist_id = extract_playlist_id(playlist_url, api_key)
         if playlist_id:
             print(f"\nPlaylist ID found: {playlist_id}")
-            video_ids = get_videos_by_date_range(playlist_id, start_date, end_date)
+            video_ids = get_videos_by_date_range(playlist_id, start_date, end_date, api_key)
         else:
             print("Playlist ID could not be retrieved.")
             video_ids = []
